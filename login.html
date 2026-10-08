@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Sign in · Daily Life Assistant</title>
+<link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/styles.css"></head>
+<body><main style="margin:auto;max-width:420px">
+<h1>Daily Life Assistant</h1><p class="muted">Sign in, or create an account with your email.</p>
+<form class="panel" id="f"><label for="em">Email</label><input id="em" type="email" required autocomplete="email" style="width:100%">
+<label for="pw">Password (at least 8 characters)</label><input id="pw" type="password" required minlength="8" autocomplete="current-password" style="width:100%">
+<p id="msg" role="status" class="muted" style="margin-top:.8rem"></p>
+<div class="row"><button class="btn" id="in">Sign in</button><button type="button" class="btn ghost" id="up">Create account</button><button type="button" class="btn ghost sm" id="fp">Forgot password</button></div></form>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="js/config.js"></script>
+<script>
+var sb = supabase.createClient(APP_CONFIG.SUPABASE_URL, APP_CONFIG.SUPABASE_KEY);
+var $ = function (i) { return document.getElementById(i); }, say = function (t) { $('msg').textContent = t; };
+sb.auth.getSession().then(function (r) { if (r.data.session) location.replace('app.html'); });
+function creds() { if (!$('f').reportValidity()) return null; return { email: $('em').value.trim(), password: $('pw').value }; }
+$('f').addEventListener('submit', async function (e) {
+  e.preventDefault(); var c = creds(); if (!c) return; say('Signing in…');
+  var r = await sb.auth.signInWithPassword(c);
+  if (r.error) say(r.error.message); else location.replace('app.html');
+});
+$('up').addEventListener('click', async function () {
+  var c = creds(); if (!c) return; say('Creating account…');
+  var r = await sb.auth.signUp(c);
+  if (r.error) return say(r.error.message);
+  if (r.data.session) location.replace('app.html'); else say('Account created. Check your email and click the confirmation link, then sign in.');
+});
+$('fp').addEventListener('click', async function () {
+  var em = $('em').value.trim(); if (!em) return say('Type your email first, then press Forgot password.');
+  var r = await sb.auth.resetPasswordForEmail(em, { redirectTo: location.origin + location.pathname.replace('login.html', 'app.html') });
+  say(r.error ? r.error.message : 'If that email has an account, a reset link is on its way.');
+});
+</script></main></body></html>

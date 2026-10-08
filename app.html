@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Daily Life Assistant</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/styles.css"></head>
+<body><div class="shell">
+<nav class="side" aria-label="Main"><div class="brand">Daily Life Assistant</div>
+<a class="nav" href="#today">Today</a><a class="nav" href="#assistant">Assistant</a><a class="nav" href="#tasks">Tasks</a><a class="nav" href="#reminders">Reminders</a><a class="nav" href="#notes">Notes</a><a class="nav" href="#goals">Goals</a><a class="nav" href="#settings">Settings</a>
+<button class="btn" data-act="quick">Quick add</button></nav>
+<main id="view" tabindex="-1"></main></div>
+<button class="btn fab" data-act="quick">+ Add</button>
+<dialog id="quick"><form data-form="quick"><h2>Quick add</h2>
+<label for="qk">Type</label><select id="qk"><option value="task">Task</option><option value="reminder">Reminder</option><option value="note">Note</option></select>
+<label for="qt">Title</label><input id="qt" required maxlength="200" style="width:100%">
+<label for="qw">Date and time (required for reminders)</label><input id="qw" type="datetime-local">
+<p></p><div class="row"><button class="btn">Save</button><button type="button" class="btn ghost" onclick="document.getElementById('quick').close()">Cancel</button></div></form></dialog>
+<div id="live" aria-live="polite"></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="js/config.js"></script><script src="js/store.js"></script><script src="js/auth.js"></script>
+</body></html>
