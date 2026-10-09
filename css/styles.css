@@ -47,3 +47,6 @@ label{display:block;font-size:.9rem;margin:.6rem 0 .2rem;color:var(--muted)}
 .hero h1{font-size:clamp(2rem,5vw,3.2rem);letter-spacing:-.02em}.hero p.lead{font-size:1.15rem;color:var(--muted)}
 .feat{max-width:1000px;margin:0 auto;padding:0 1.2rem 3rem;display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1.2rem}
 @media(max-width:760px){.hero{grid-template-columns:1fr}}
+.bar{height:10px;border-radius:99px;background:var(--line);overflow:hidden}.bar i{display:block;height:100%;background:var(--accent)}
+.barrow{display:grid;grid-template-columns:90px 1fr 36px;gap:.6rem;align-items:center;margin:.4rem 0}
+.chk{display:flex;gap:.5rem;align-items:center;color:var(--ink);margin:.2rem 0}
