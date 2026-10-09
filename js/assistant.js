@@ -1,6 +1,8 @@
 /* Stage 1 assistant: a rule-based stand-in. Stage 3 replaces respond() with a call to a server-side AI function.
    It only PROPOSES changes. Nothing is saved until the user confirms. */
 (function () {
+  // Must match the function's URL slug in Supabase (Edge Functions list, end of the URL), not its display name.
+  var FUNCTION_NAME = 'swift-responder';
   var DAYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
   function parseWhen(text) {
     var t = text.toLowerCase(), d = new Date(), hasDay = false;
@@ -26,7 +28,7 @@
     respond: async function (text, ctx) {
       try {
         var hist = (ctx.messages || []).slice(0, -1).map(function (m) { return { role: m.role, content: m.content }; });
-        var r = await window.sb.functions.invoke('ai-chat', { body: { text: text, history: hist } });
+        var r = await window.sb.functions.invoke(FUNCTION_NAME, { body: { text: text, history: hist } });
         if (r.error) {
           var st = r.error.context && r.error.context.status;
           if (st === 429) return { content: 'You have reached today\'s AI limit. Try again tomorrow, or use the simple commands: Plan my day, Remind me to …, Add task: …' };
