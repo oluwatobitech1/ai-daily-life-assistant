@@ -13,13 +13,5 @@ action-item extraction, goals with progress, settings, JSON export, delete all d
 - Stage 3 (AI): replace `Assistant.respond` in `js/assistant.js` with a call to a Supabase Edge Function that holds the AI key. Never put keys in browser code.
 - Stage 4 (Reminders): scheduled Edge Function finds due reminders and sends email; log to `notification_logs`.
 
-## Stage 3 (AI)
-Run `supabase/migrations/002_ai_usage.sql`, then deploy `supabase/functions/ai-chat` with the Gemini key stored as a Supabase secret (`GEMINI_API_KEY`).
-If the function is unreachable, the app falls back to the simple built-in commands. Limit: 60 AI requests per user per rolling 24 hours.
-
-## Deploy (GitHub + Vercel)
-1. Push this folder to a GitHub repository (private is fine).
-2. Vercel: Add New, Project, import the repo. Framework preset "Other". Leave build command and output directory empty. Deploy.
-3. Supabase, Authentication, URL Configuration: set Site URL to your Vercel URL and add it (with /app.html) to Redirect URLs.
-4. Before real users sign up: turn "Confirm email" back on (Authentication, Sign In / Providers).
-Never commit secret keys. Only the public Supabase URL and publishable key live in js/config.js.
+## Version 2: no AI
+The AI chat was removed. The Planner page generates a day plan, reminders and goal steps from simple options, and the Overview page shows charts. Everything runs in the browser. The old Supabase Edge Function and its secrets are no longer used and can be deleted.
