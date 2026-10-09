@@ -1,8 +1,9 @@
 /* Stage 1 assistant: a rule-based stand-in. Stage 3 replaces respond() with a call to a server-side AI function.
    It only PROPOSES changes. Nothing is saved until the user confirms. */
 (function () {
-  // Must match the function's URL slug in Supabase (Edge Functions list, end of the URL), not its display name.
-  var FUNCTION_NAME = 'swift-responder';
+  // Function slugs to try, in order. The slug is the end of the function URL in Supabase (Edge Functions list).
+  var FUNCTION_NAMES = ['swift-responder', 'ai-chat'];
+  var SHOW_AI_ERRORS = true; // set to false once the AI works to hide the diagnostic line
   var DAYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
   function parseWhen(text) {
     var t = text.toLowerCase(), d = new Date(), hasDay = false;
@@ -26,17 +27,27 @@
   window.Assistant = {
     suggestions: ['Plan my day', 'Remind me to call the client tomorrow at 2 PM', 'Add task: pay electricity bill', 'Break down: prepare a client proposal'],
     respond: async function (text, ctx) {
+      var why = '';
       try {
         var hist = (ctx.messages || []).slice(0, -1).map(function (m) { return { role: m.role, content: m.content }; });
-        var r = await window.sb.functions.invoke(FUNCTION_NAME, { body: { text: text, history: hist } });
-        if (r.error) {
-          var st = r.error.context && r.error.context.status;
+        for (var i = 0; i < FUNCTION_NAMES.length; i++) {
+          var name = FUNCTION_NAMES[i];
+          var r = await window.sb.functions.invoke(name, { body: { text: text, history: hist } });
+          if (!r.error) {
+            if (r.data && r.data.content) return { content: r.data.content, proposal: r.data.proposal || undefined };
+            why = name + ': empty reply'; break;
+          }
+          var st = r.error.context && r.error.context.status, detail = '';
+          try { detail = (await r.error.context.text()).slice(0, 200); } catch (e2) { detail = r.error.message || ''; }
+          why = name + ': ' + (st || 'network error') + ' ' + detail;
           if (st === 429) return { content: 'You have reached today\'s AI limit. Try again tomorrow, or use the simple commands: Plan my day, Remind me to …, Add task: …' };
-          throw r.error;
+          if (st !== 404) break; // 404 = wrong function name, try the next one
         }
-        if (r.data && r.data.content) return { content: r.data.content, proposal: r.data.proposal || undefined };
-        throw new Error('empty');
-      } catch (e) { console.warn('AI unavailable, using local fallback', e); return this.localRespond(text, ctx); }
+      } catch (e) { why = 'exception: ' + (e && e.message || e); }
+      console.warn('AI unavailable, using local fallback:', why);
+      var res = await this.localRespond(text, ctx);
+      if (SHOW_AI_ERRORS && why) res.content += '\n\n[AI diagnostic: ' + why + ']';
+      return res;
     },
     localRespond: async function (text, ctx) {
       var m;
