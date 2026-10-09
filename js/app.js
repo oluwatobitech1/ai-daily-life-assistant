@@ -27,28 +27,55 @@
     var focus = open.filter(function (t) { return !t.due_at || isToday(t.due_at) || new Date(t.due_at) < new Date(); }).sort(byDue).slice(0, 6);
     var up = rem.filter(function (r) { return r.status === 'pending'; }).sort(byDue);
     return '<h1>' + g + (p.display_name ? ', ' + esc(p.display_name) : '') + '</h1><p class="muted">' + new Date().toLocaleDateString([], { weekday: 'long', day: 'numeric', month: 'long' }) + '</p>' +
-      '<form class="row" data-form="ask"><label class="sr" for="ask">Ask your assistant</label><input id="ask" class="grow" placeholder="Ask your assistant, e.g. Plan my day" required maxlength="500"><button class="btn">Ask</button></form>' +
-      '<div class="chips">' + Assistant.suggestions.slice(0, 3).map(function (s) { return '<button class="chip" data-act="chip" data-text="' + esc(s) + '">' + esc(s) + '</button>'; }).join('') + '</div>' +
+      '<div class="row" style="margin:.8rem 0"><a class="btn" href="#planner">Plan my day</a><a class="btn ghost" href="#reports">See my progress</a></div>' +
       '<div class="stats"><div class="stat"><b>' + open.length + '</b><span>Open tasks</span></div><div class="stat"><b>' + done.length + '</b><span>Done today</span></div><div class="stat"><b>' + (up[0] ? hm(up[0].due_at) : 'None') + '</b><span>Next reminder</span></div></div>' +
-      '<section class="panel"><h2>Today\'s focus</h2>' + (focus.length ? '<ul class="list">' + focus.map(taskLi).join('') + '</ul>' : '<p class="empty">Nothing due today. Add a task or ask the assistant to plan your day.</p>') + '</section>' +
+      '<section class="panel"><h2>Today\'s focus</h2>' + (focus.length ? '<ul class="list">' + focus.map(taskLi).join('') + '</ul>' : '<p class="empty">Nothing due today. Add a task or open the Planner to plan your day.</p>') + '</section>' +
       '<section class="panel"><h2>Upcoming reminders</h2>' + (up.length ? '<ul class="list">' + up.slice(0, 4).map(remLi).join('') + '</ul>' : '<p class="empty">No reminders set.</p>') + '</section>';
   }
 
-  function propHtml(m) {
-    var p = m.proposal; if (!p) return '';
-    if (m.state === 'saved') return '<div class="proposal">Saved.</div>';
-    if (m.state === 'dismissed') return '<div class="proposal muted">Dismissed. Nothing was saved.</div>';
-    var body = p.type === 'reminder' ? '<b>' + esc(p.title) + '</b><br>' + fmt(p.due_at) :
-      p.type === 'plan' ? '<ul>' + p.items.map(function (i) { return '<li>' + hm(i.start) + ' to ' + hm(i.end) + ': ' + esc(i.title) + '</li>'; }).join('') + '</ul>' :
-        '<ul>' + p.items.map(function (i) { return '<li>' + esc(i.title) + '</li>'; }).join('') + '</ul>';
-    return '<div class="proposal">' + body + '<div class="row"><button class="btn sm" data-act="psave" data-id="' + m.id + '">Save</button><button class="btn ghost sm" data-act="pdismiss" data-id="' + m.id + '">Dismiss</button></div></div>';
+  function whenFor(k) {
+    var d = new Date();
+    if (k === 'h1') d.setHours(d.getHours() + 1);
+    else if (k === 't8') { d.setHours(20, 0, 0, 0); if (d < new Date()) d.setDate(d.getDate() + 1); }
+    else { d.setDate(d.getDate() + 1); d.setHours(k === 'm9' ? 9 : 14, 0, 0, 0); }
+    d.setSeconds(0, 0);
+    return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
   }
-  async function vAssistant() {
-    var msgs = (await DB.messages.list()).slice().reverse();
-    return '<h1>Assistant</h1><p class="muted">The assistant suggests. Nothing is saved until you press Save.</p>' +
-      '<div class="chips">' + Assistant.suggestions.map(function (s) { return '<button class="chip" data-act="chip" data-text="' + esc(s) + '">' + esc(s) + '</button>'; }).join('') + '</div>' +
-      '<div class="chat" role="log" aria-live="polite">' + (msgs.length ? msgs.map(function (m) { return '<div class="msg ' + m.role + '">' + esc(m.content) + propHtml(m) + '</div>'; }).join('') : '<p class="empty">No messages yet. Pick a suggestion or type below.</p>') + '</div>' +
-      '<form class="row" data-form="chat"><label class="sr" for="chatin">Message</label><input id="chatin" class="grow" required maxlength="500" placeholder="Type a request"><button class="btn">Send</button><button type="button" class="btn ghost" data-act="clearchat">Clear chat</button></form>';
+  var preview = null;
+  async function vPlanner() {
+    var p = await DB.profile.get(), tasks = (await DB.tasks.list()).filter(function (t) { return t.status !== 'done'; }).sort(byDue);
+    var planForm = tasks.length ? '<form data-form="plan"><div class="row"><div><label for="ps1">Start at</label><input id="ps1" type="time" value="' + esc(p.day_start) + '"></div><div><label for="pb">Block (min)</label><select id="pb"><option>30</option><option>45</option><option selected>60</option><option>90</option></select></div><div><label for="pk">Break (min)</label><select id="pk"><option>0</option><option>5</option><option selected>10</option><option>15</option></select></div></div><p class="muted" style="margin:.8rem 0 .2rem">Tasks to include</p>' +
+      tasks.slice(0, 12).map(function (t, i) { return '<label class="chk"><input type="checkbox" name="pt" value="' + t.id + '"' + (i < 6 ? ' checked' : '') + '> ' + esc(t.title) + '</label>'; }).join('') + '<p></p><button class="btn">Generate plan</button></form>' : '<p class="empty">Add some tasks first, then come back to plan your day.</p>';
+    return '<h1>Planner</h1><p class="muted">Choose options, generate, review, then save. Nothing is saved until you press Save.</p>' +
+      '<section class="panel"><h2>Plan my day</h2>' + planForm + '<div id="prev-plan"></div></section>' +
+      '<section class="panel"><h2>Quick reminder</h2><div class="chips"><button class="chip" data-act="rq" data-k="h1">In 1 hour</button><button class="chip" data-act="rq" data-k="t8">Tonight 8 PM</button><button class="chip" data-act="rq" data-k="m9">Tomorrow 9 AM</button><button class="chip" data-act="rq" data-k="m2">Tomorrow 2 PM</button></div>' +
+      '<form class="row" data-form="remq"><div class="grow"><label for="rqt">Remind me to</label><input id="rqt" required maxlength="200" style="width:100%"></div><div><label for="rqw">When</label><input id="rqw" type="datetime-local" required></div><button class="btn">Save reminder</button></form></section>' +
+      '<section class="panel"><h2>Break a goal into steps</h2><form class="row" data-form="goalgen"><div class="grow"><label for="gg">Goal</label><input id="gg" required maxlength="120" placeholder="e.g. open my online shop" style="width:100%"></div><div><label for="gk">Type</label><select id="gk">' + Assistant.goalTemplates.map(function (k) { return '<option>' + k + '</option>'; }).join('') + '</select></div><button class="btn">Generate steps</button></form><div id="prev-goal"></div></section>';
+  }
+  function dayKey(d) { return new Date(d).toDateString(); }
+  async function vReports() {
+    var tasks = await DB.tasks.list(), goals = await DB.goals.list(), rem = await DB.reminders.list();
+    var open = tasks.filter(function (t) { return t.status !== 'done'; }), done = tasks.filter(function (t) { return t.status === 'done'; });
+    var days = [], i;
+    for (i = 6; i >= 0; i--) { var d = new Date(); d.setDate(d.getDate() - i); days.push(d); }
+    var counts = days.map(function (d) { return done.filter(function (t) { return t.completed_at && dayKey(t.completed_at) === d.toDateString(); }).length; });
+    var max = Math.max(1, Math.max.apply(null, counts)), weekTotal = counts.reduce(function (a, b) { return a + b; }, 0);
+    var rate = tasks.length ? Math.round(done.length / tasks.length * 100) : 0;
+    var bars = counts.map(function (c, n) {
+      var h = Math.round(c / max * 90), x = 12 + n * 44;
+      return '<rect x="' + x + '" y="' + (110 - h) + '" width="30" height="' + h + '" rx="4" style="fill:var(--accent)"></rect><text x="' + (x + 15) + '" y="' + (104 - h) + '" text-anchor="middle" font-size="11" style="fill:var(--ink)">' + (c || '') + '</text><text x="' + (x + 15) + '" y="128" text-anchor="middle" font-size="11" style="fill:var(--muted)">' + days[n].toLocaleDateString([], { weekday: 'short' }) + '</text>';
+    }).join('');
+    var pr = ['high', 'medium', 'low'], colors = { high: 'var(--danger)', medium: 'var(--warn)', low: 'var(--accent)' };
+    var prio = pr.map(function (k) {
+      var c = open.filter(function (t) { return t.priority === k; }).length, w = open.length ? Math.round(c / open.length * 100) : 0;
+      return '<div class="barrow"><span>' + k + '</span><div class="bar"><i style="width:' + w + '%;background:' + colors[k] + '"></i></div><b>' + c + '</b></div>';
+    }).join('');
+    var goalBars = goals.length ? goals.map(function (g) { return '<div class="barrow" style="grid-template-columns:1fr 2fr 44px"><span>' + esc(g.title) + '</span><div class="bar"><i style="width:' + g.progress + '%"></i></div><b>' + g.progress + '%</b></div>'; }).join('') : '<p class="empty">No goals yet. Add one on the Goals page.</p>';
+    return '<h1>Overview</h1><p class="muted">Your progress at a glance.</p>' +
+      '<div class="stats"><div class="stat"><b>' + open.length + '</b><span>Open tasks</span></div><div class="stat"><b>' + weekTotal + '</b><span>Done in last 7 days</span></div><div class="stat"><b>' + rate + '%</b><span>Completion rate</span></div><div class="stat"><b>' + rem.filter(function (r) { return r.status === 'pending'; }).length + '</b><span>Reminders waiting</span></div></div>' +
+      '<section class="panel"><h2>Tasks completed, last 7 days</h2><svg viewBox="0 0 320 136" role="img" aria-label="Tasks completed per day over the last 7 days: ' + counts.join(', ') + '" style="width:100%;max-width:520px">' + bars + '</svg></section>' +
+      '<section class="panel"><h2>Open tasks by priority</h2>' + (open.length ? prio : '<p class="empty">No open tasks.</p>') + '</section>' +
+      '<section class="panel"><h2>Goal progress</h2>' + goalBars + '</section>';
   }
 
   async function vTasks() {
@@ -79,40 +106,38 @@
   async function vSettings() {
     var p = await DB.profile.get(), zones = (Intl.supportedValuesOf ? Intl.supportedValuesOf('timeZone') : [p.timezone]);
     return '<h1>Settings</h1><form class="panel" data-form="profile"><label for="pn">Your name</label><input id="pn" maxlength="60" value="' + esc(p.display_name) + '"><label for="pz">Time zone</label><select id="pz">' + zones.map(function (z) { return '<option' + (z === p.timezone ? ' selected' : '') + '>' + esc(z) + '</option>'; }).join('') + '</select><label for="ps">Start of day</label><input id="ps" type="time" value="' + esc(p.day_start) + '"><p></p><button class="btn">Save settings</button></form>' +
-      '<section class="panel"><h2>Your data</h2><p class="muted">Your data is stored in your account and only you can read it. When you use the assistant, your message and open task titles are sent to the Google Gemini API to write the reply.</p><div class="row"><button class="btn ghost" data-act="export">Export data (JSON)</button><button class="btn danger" data-act="wipe">Delete all my data</button></div></section>';
+      '<section class="panel"><h2>Your data</h2><p class="muted">Your data is stored in your account and only you can read it.</p><div class="row"><button class="btn ghost" data-act="export">Export data (JSON)</button><button class="btn danger" data-act="wipe">Delete all my data</button></div></section>';
   }
 
-  var ROUTES = { today: ['Today', vToday], assistant: ['Assistant', vAssistant], tasks: ['Tasks', vTasks], reminders: ['Reminders', vReminders], notes: ['Notes', vNotes], goals: ['Goals', vGoals], settings: ['Settings', vSettings] };
+  var ROUTES = { today: ['Today', vToday], planner: ['Planner', vPlanner], reports: ['Overview', vReports], tasks: ['Tasks', vTasks], reminders: ['Reminders', vReminders], notes: ['Notes', vNotes], goals: ['Goals', vGoals], settings: ['Settings', vSettings] };
   async function render() {
     var r = (location.hash || '#today').slice(1); if (!ROUTES[r]) r = 'today';
     document.querySelectorAll('.side a.nav').forEach(function (a) { if (a.getAttribute('href') === '#' + r) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
     document.title = ROUTES[r][0] + ' · Daily Life Assistant';
     try {
       var html = await ROUTES[r][1](); $('#view').innerHTML = html;
-      if (r === 'assistant') { var pre = sessionStorage.getItem('ask'); if (pre) { sessionStorage.removeItem('ask'); send(pre); } else window.scrollTo(0, document.body.scrollHeight); }
     } catch (e) { console.error(e); $('#view').innerHTML = '<p>Something went wrong loading this page.</p><button class="btn" data-act="retry">Try again</button>'; }
-  }
-  async function send(text) {
-    text = text.trim(); if (!text) return;
-    await DB.messages.add({ role: 'user', content: text });
-    var ctx = { tasks: await DB.tasks.list(), profile: await DB.profile.get(), messages: (await DB.messages.list()).slice(0, 7).reverse() }, res;
-    try { res = await Assistant.respond(text, ctx); } catch (e) { res = { content: 'I could not process that. Please try again.' }; }
-    await DB.messages.add({ role: 'assistant', content: res.content, proposal: res.proposal || null, state: res.proposal ? 'pending' : null });
-    if (location.hash !== '#assistant') location.hash = '#assistant'; else render();
-  }
-  async function applyProposal(m) {
-    var p = m.proposal;
-    if (p.type === 'reminder') await DB.reminders.add({ title: p.title, due_at: p.due_at, status: 'pending' });
-    else if (p.type === 'tasks') for (var i = 0; i < p.items.length; i++) await DB.tasks.add({ title: p.items[i].title, priority: p.items[i].priority, status: 'open', due_at: null });
-    else if (p.type === 'plan') for (var j = 0; j < p.items.length; j++) await DB.tasks.update(p.items[j].task_id, { scheduled_start: p.items[j].start, scheduled_end: p.items[j].end });
   }
 
   document.addEventListener('submit', async function (e) {
     var f = e.target.closest('form[data-form]'); if (!f) return; e.preventDefault();
     var k = f.dataset.form, v = function (id) { return $('#' + id, f) ? $('#' + id, f).value.trim() : ''; };
     try {
-      if (k === 'ask') { sessionStorage.setItem('ask', v('ask')); location.hash = '#assistant'; return; }
-      if (k === 'chat') { var t = v('chatin'); f.reset(); return send(t); }
+      if (k === 'plan') {
+        var ids = Array.prototype.map.call(f.querySelectorAll('input[name=pt]:checked'), function (c) { return c.value; });
+        if (!ids.length) { toast('Tick at least one task'); return; }
+        var chosen = (await DB.tasks.list()).filter(function (t) { return ids.indexOf(t.id) > -1; });
+        var items = Assistant.planBlocks(chosen, { start: v('ps1'), block: +v('pb'), brk: +v('pk') });
+        preview = { type: 'plan', items: items };
+        $('#prev-plan').innerHTML = '<h3 style="margin-top:1rem">Draft plan</h3><ul class="list">' + items.map(function (i) { return '<li><div class="t"><b>' + hm(i.start) + ' to ' + hm(i.end) + '</b><br><small>' + esc(i.title) + '</small></div></li>'; }).join('') + '</ul><button class="btn" data-act="saveplan">Save plan</button>';
+        return;
+      }
+      if (k === 'remq') { await DB.reminders.add({ title: v('rqt'), due_at: iso(v('rqw')), status: 'pending' }); toast('Reminder saved'); location.hash = '#reminders'; return; }
+      if (k === 'goalgen') {
+        var steps = Assistant.goalSteps(v('gk'), v('gg'));
+        $('#prev-goal').innerHTML = '<h3 style="margin-top:1rem">Suggested steps</h3>' + steps.map(function (s) { return '<label class="chk"><input type="checkbox" name="gs" value="' + esc(s) + '" checked> ' + esc(s) + '</label>'; }).join('') + '<p></p><button class="btn" data-act="savegoal">Add ticked steps as tasks</button>';
+        return;
+      }
       if (k === 'task') { await DB.tasks.add({ title: v('tt'), priority: v('tp'), status: 'open', due_at: iso(v('td')) }); toast('Task added'); }
       if (k === 'reminder') { await DB.reminders.add({ title: v('rt'), due_at: iso(v('rd')), status: 'pending' }); toast('Reminder saved'); }
       if (k === 'note') { await DB.notes.add({ title: v('nt'), body: v('nb') }); toast('Note saved'); }
@@ -132,16 +157,21 @@
     var b = e.target.closest('[data-act]'); if (!b || b.tagName === 'INPUT' || b.tagName === 'SELECT') return;
     var a = b.dataset.act, id = b.dataset.id;
     try {
-      if (a === 'chip') return send(b.dataset.text);
       if (a === 'retry') return render();
       if (a === 'quick') return $('#quick').showModal();
       if (a === 'del') { if (!confirm('Delete this item? This cannot be undone.')) return; await DB[b.dataset.t].remove(id); return render(); }
-      if (a === 'psave' || a === 'pdismiss') {
-        var m = (await DB.messages.list()).filter(function (x) { return x.id === id; })[0]; if (!m) return;
-        if (a === 'psave') { await applyProposal(m); await DB.messages.update(id, { state: 'saved' }); toast('Saved'); } else await DB.messages.update(id, { state: 'dismissed' });
-        return render();
+      if (a === 'rq') { $('#rqw').value = whenFor(b.dataset.k); return $('#rqt').focus(); }
+      if (a === 'saveplan') {
+        if (!preview || preview.type !== 'plan') return;
+        for (var pi = 0; pi < preview.items.length; pi++) await DB.tasks.update(preview.items[pi].task_id, { scheduled_start: preview.items[pi].start, scheduled_end: preview.items[pi].end });
+        preview = null; toast('Plan saved'); location.hash = '#tasks'; return;
       }
-      if (a === 'clearchat') { if (!confirm('Clear the whole conversation?')) return; var all = await DB.messages.list(); for (var i = 0; i < all.length; i++) await DB.messages.remove(all[i].id); return render(); }
+      if (a === 'savegoal') {
+        var boxes = document.querySelectorAll('#prev-goal input[name=gs]:checked');
+        if (!boxes.length) return toast('Tick at least one step');
+        for (var gi = 0; gi < boxes.length; gi++) await DB.tasks.add({ title: boxes[gi].value, priority: 'medium', status: 'open', due_at: null });
+        toast('Tasks added'); location.hash = '#tasks'; return;
+      }
       if (a === 'extract') {
         var n = (await DB.notes.list()).filter(function (x) { return x.id === id; })[0], s = Assistant.extractActions(n.body), box = $('#sug-' + id);
         box.innerHTML = s.length ? '<ul class="list">' + s.map(function (x) { return '<li><span class="t">' + esc(x) + '</span><button class="btn sm" data-act="addsug" data-text="' + esc(x) + '">Add as task</button></li>'; }).join('') + '</ul>' : '<p class="empty">No action items found. Start lines with - or todo:</p>';
