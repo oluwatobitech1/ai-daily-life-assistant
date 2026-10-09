@@ -12,7 +12,7 @@
     goalTemplates: Object.keys(TEMPLATES),
     goalSteps: function (kind, goal) { return (TEMPLATES[kind] || TEMPLATES.Project).map(function (s) { return s.replace(/\{g\}/g, goal); }); },
     planBlocks: function (tasks, o) {
-      var st = (o.start || '08:00').split(':'), t0 = new Date(); t0.setHours(+st[0], +st[1], 0, 0);
+      var st = (o.start || '08:00').split(':'), t0 = new Date(); t0.setDate(t0.getDate() + (o.dayOffset || 0)); t0.setHours(+st[0], +st[1], 0, 0);
       if (t0 < new Date()) { t0 = new Date(); t0.setMinutes(Math.ceil(t0.getMinutes() / 15) * 15, 0, 0); }
       return tasks.slice().sort(function (a, b) { return (P[a.priority] - P[b.priority]) || String(a.due_at || 'z').localeCompare(String(b.due_at || 'z')); })
         .map(function (t) {

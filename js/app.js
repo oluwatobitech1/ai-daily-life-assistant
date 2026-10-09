@@ -7,12 +7,13 @@
   function isToday(iso) { return new Date(iso).toDateString() === new Date().toDateString(); }
   function toast(m) { var t = document.createElement('div'); t.className = 'toast'; t.textContent = m; $('#live').appendChild(t); setTimeout(function () { t.remove(); }, 3200); }
   function iso(v) { return v ? new Date(v).toISOString() : null; }
+  function localDT(iso) { if (!iso) return ''; var d = new Date(iso); return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16); }
   var byDue = function (a, b) { return String(a.due_at || 'z').localeCompare(String(b.due_at || 'z')); };
 
   function taskLi(t) {
     return '<li class="' + (t.status === 'done' ? 'done' : '') + '"><input type="checkbox" data-act="toggle" data-id="' + t.id + '" aria-label="Mark done: ' + esc(t.title) + '"' + (t.status === 'done' ? ' checked' : '') + '>' +
-      '<div class="t"><b>' + esc(t.title) + '</b><br><small>' + (t.scheduled_start ? 'Planned ' + hm(t.scheduled_start) + ' to ' + hm(t.scheduled_end) : t.due_at ? 'Due ' + fmt(t.due_at) : 'No due date') + '</small></div>' +
-      '<span class="tag ' + esc(t.priority) + '">' + esc(t.priority) + '</span><button class="btn danger sm" data-act="del" data-t="tasks" data-id="' + t.id + '" aria-label="Delete task ' + esc(t.title) + '">Delete</button></li>';
+      '<div class="t"><b>' + esc(t.title) + '</b><br><small>' + (t.status !== 'done' && t.due_at && new Date(t.due_at) < new Date() ? '<span class="tag high">Overdue</span> ' : '') + (t.scheduled_start ? 'Planned ' + hm(t.scheduled_start) + ' to ' + hm(t.scheduled_end) : t.due_at ? 'Due ' + fmt(t.due_at) : 'No due date') + '</small></div>' +
+      '<span class="tag ' + esc(t.priority) + '">' + esc(t.priority) + '</span><button class="btn ghost sm" data-act="edit" data-id="' + t.id + '" aria-label="Edit task ' + esc(t.title) + '">Edit</button><button class="btn danger sm" data-act="del" data-t="tasks" data-id="' + t.id + '" aria-label="Delete task ' + esc(t.title) + '">Delete</button></li>';
   }
   function remLi(r) {
     return '<li class="' + (r.status === 'sent' ? 'done' : '') + '"><div class="t"><b>' + esc(r.title) + '</b><br><small>' + fmt(r.due_at) + (r.status === 'sent' ? ' (delivered)' : '') + '</small></div>' +
@@ -44,13 +45,61 @@
   var preview = null;
   async function vPlanner() {
     var p = await DB.profile.get(), tasks = (await DB.tasks.list()).filter(function (t) { return t.status !== 'done'; }).sort(byDue);
-    var planForm = tasks.length ? '<form data-form="plan"><div class="row"><div><label for="ps1">Start at</label><input id="ps1" type="time" value="' + esc(p.day_start) + '"></div><div><label for="pb">Block (min)</label><select id="pb"><option>30</option><option>45</option><option selected>60</option><option>90</option></select></div><div><label for="pk">Break (min)</label><select id="pk"><option>0</option><option>5</option><option selected>10</option><option>15</option></select></div></div><p class="muted" style="margin:.8rem 0 .2rem">Tasks to include</p>' +
+    var planForm = tasks.length ? '<form data-form="plan"><div class="row"><div><label for="ps1">Start at</label><input id="ps1" type="time" value="' + esc(p.day_start) + '"></div><div><label for="pd">Plan for</label><select id="pd"><option value="0">Today</option><option value="1">Tomorrow</option></select></div><div><label for="pb">Block (min)</label><select id="pb"><option>30</option><option>45</option><option selected>60</option><option>90</option></select></div><div><label for="pk">Break (min)</label><select id="pk"><option>0</option><option>5</option><option selected>10</option><option>15</option></select></div></div><p class="muted" style="margin:.8rem 0 .2rem">Tasks to include</p>' +
       tasks.slice(0, 12).map(function (t, i) { return '<label class="chk"><input type="checkbox" name="pt" value="' + t.id + '"' + (i < 6 ? ' checked' : '') + '> ' + esc(t.title) + '</label>'; }).join('') + '<p></p><button class="btn">Generate plan</button></form>' : '<p class="empty">Add some tasks first, then come back to plan your day.</p>';
     return '<h1>Planner</h1><p class="muted">Choose options, generate, review, then save. Nothing is saved until you press Save.</p>' +
-      '<section class="panel"><h2>Plan my day</h2>' + planForm + '<div id="prev-plan"></div></section>' +
+      '<section class="panel"><h2>Plan my day</h2>' + planForm + '<div id="prev-plan"></div><p></p><button class="btn ghost sm" data-act="clearplan">Clear saved plan</button></section>' +
       '<section class="panel"><h2>Quick reminder</h2><div class="chips"><button class="chip" data-act="rq" data-k="h1">In 1 hour</button><button class="chip" data-act="rq" data-k="t8">Tonight 8 PM</button><button class="chip" data-act="rq" data-k="m9">Tomorrow 9 AM</button><button class="chip" data-act="rq" data-k="m2">Tomorrow 2 PM</button></div>' +
       '<form class="row" data-form="remq"><div class="grow"><label for="rqt">Remind me to</label><input id="rqt" required maxlength="200" style="width:100%"></div><div><label for="rqw">When</label><input id="rqw" type="datetime-local" required></div><button class="btn">Save reminder</button></form></section>' +
       '<section class="panel"><h2>Break a goal into steps</h2><form class="row" data-form="goalgen"><div class="grow"><label for="gg">Goal</label><input id="gg" required maxlength="120" placeholder="e.g. open my online shop" style="width:100%"></div><div><label for="gk">Type</label><select id="gk">' + Assistant.goalTemplates.map(function (k) { return '<option>' + k + '</option>'; }).join('') + '</select></div><button class="btn">Generate steps</button></form><div id="prev-goal"></div></section>';
+  }
+  var chatHist = [], chatBusy = false;
+  function md(s) {
+    var out = [], inList = false;
+    esc(s).split('\n').forEach(function (l) {
+      l = l.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/`([^`]+)`/g, '<code>$1</code>');
+      var m = /^\s*(?:[-*•]|\d+[.)])\s+(.*)$/.exec(l);
+      if (m) { if (!inList) { out.push('<ul>'); inList = true; } out.push('<li>' + m[1] + '</li>'); }
+      else { if (inList) { out.push('</ul>'); inList = false; } out.push(l.trim() ? '<p>' + l + '</p>' : ''); }
+    });
+    if (inList) out.push('</ul>');
+    return out.join('');
+  }
+  function srcHtml(src) { return src && src.length ? '<p class="muted" style="margin-top:.5rem"><small>Sources: ' + src.map(function (x, i) { return '<a href="' + esc(x.url) + '" target="_blank" rel="noopener noreferrer">' + esc(x.title || ('Link ' + (i + 1))) + '</a>'; }).join(' · ') + '</small></p>' : ''; }
+  function bubble(role, content, src) {
+    return '<div class="msg md ' + (role === 'user' ? 'user' : '') + '">' + (role === 'user' ? esc(content) : md(content) + srcHtml(src) + '<div class="row"><button class="btn ghost sm" data-act="chatnote" data-text="' + esc(content) + '">Save as note</button><button class="btn ghost sm" data-act="chatcopy" data-text="' + esc(content) + '">Copy</button></div>') + '</div>';
+  }
+  var STARTERS = ['Write a polite payment reminder to a late client', 'Suggest 5 ways to get my first 10 customers', 'How should I price a new service?', 'Help me plan this week from my open tasks', 'Draft a short business proposal outline'];
+  async function vAssistant() {
+    var rows = (await DB.messages.list()).slice().reverse().slice(-40);
+    chatHist = rows.map(function (m) { return { role: m.role, content: m.content }; });
+    return '<h1>Business assistant</h1><p class="muted">Ask anything: business, writing, code, study, everyday life. It can search the web for current facts and sees your open tasks and goals when relevant. It can still make mistakes, so check important facts.</p>' +
+      '<section class="panel"><div class="chat" id="chatlog" aria-live="polite">' + (rows.length ? rows.map(function (m) { return bubble(m.role, m.content, m.proposal && m.proposal.sources); }).join('') : '<p class="empty">No messages yet. Try one of the ideas below.</p>') + '</div>' +
+      '<div class="chips">' + STARTERS.map(function (s) { return '<button class="chip" data-act="starter" data-text="' + esc(s) + '">' + esc(s) + '</button>'; }).join('') + '</div>' +
+      '<form data-form="chat"><label class="sr" for="ci">Your question</label><textarea id="ci" maxlength="4000" placeholder="Ask anything… (Enter to send, Shift+Enter for a new line)"></textarea><p></p><div class="row"><button class="btn" id="csend">Send</button><label class="chk" style="margin:0"><input type="checkbox" id="cweb" checked> Search the web</label><button type="button" class="btn danger" data-act="chatclear">Clear chat</button></div></form></section>';
+  }
+  async function sendChat(text) {
+    if (chatBusy || !text) return; chatBusy = true;
+    var log = $('#chatlog'), btn = $('#csend'); if (btn) btn.disabled = true;
+    var empty = log.querySelector('.empty'); if (empty) empty.remove();
+    log.insertAdjacentHTML('beforeend', bubble('user', text));
+    log.insertAdjacentHTML('beforeend', '<div class="msg" id="thinking">Thinking…</div>');
+    $('#ci').value = ''; chatHist.push({ role: 'user', content: text });
+    try {
+      var r = await sb.functions.invoke('assistant', { body: { messages: chatHist.slice(-30), useContext: true, webSearch: $('#cweb') ? $('#cweb').checked : true } });
+      var reply = r.data && r.data.reply, msg = null;
+      if (r.error) {
+        try { msg = (await r.error.context.json()).error; } catch (x) { msg = null; }
+        throw new Error(msg || 'The assistant is not reachable right now.');
+      }
+      if (!reply) throw new Error('No answer came back.');
+      chatHist.push({ role: 'assistant', content: reply });
+      $('#thinking').outerHTML = bubble('assistant', reply, r.data.sources);
+    } catch (err) {
+      chatHist.pop(); var th = $('#thinking'); if (th) th.outerHTML = '<div class="msg">' + esc(err.message) + '</div>';
+      if ($('#ci')) $('#ci').value = text;
+    }
+    chatBusy = false; if ($('#csend')) $('#csend').disabled = false; var l = $('#chatlog'); if (l) l.lastElementChild.scrollIntoView({ block: 'nearest' });
   }
   function dayKey(d) { return new Date(d).toDateString(); }
   async function vReports() {
@@ -109,7 +158,7 @@
       '<section class="panel"><h2>Your data</h2><p class="muted">Your data is stored in your account and only you can read it.</p><div class="row"><button class="btn ghost" data-act="export">Export data (JSON)</button><button class="btn danger" data-act="wipe">Delete all my data</button></div></section>';
   }
 
-  var ROUTES = { today: ['Today', vToday], planner: ['Planner', vPlanner], reports: ['Overview', vReports], tasks: ['Tasks', vTasks], reminders: ['Reminders', vReminders], notes: ['Notes', vNotes], goals: ['Goals', vGoals], settings: ['Settings', vSettings] };
+  var ROUTES = { today: ['Today', vToday], assistant: ['Assistant', vAssistant], planner: ['Planner', vPlanner], reports: ['Overview', vReports], tasks: ['Tasks', vTasks], reminders: ['Reminders', vReminders], notes: ['Notes', vNotes], goals: ['Goals', vGoals], settings: ['Settings', vSettings] };
   async function render() {
     var r = (location.hash || '#today').slice(1); if (!ROUTES[r]) r = 'today';
     document.querySelectorAll('.side a.nav').forEach(function (a) { if (a.getAttribute('href') === '#' + r) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
@@ -127,7 +176,7 @@
         var ids = Array.prototype.map.call(f.querySelectorAll('input[name=pt]:checked'), function (c) { return c.value; });
         if (!ids.length) { toast('Tick at least one task'); return; }
         var chosen = (await DB.tasks.list()).filter(function (t) { return ids.indexOf(t.id) > -1; });
-        var items = Assistant.planBlocks(chosen, { start: v('ps1'), block: +v('pb'), brk: +v('pk') });
+        var items = Assistant.planBlocks(chosen, { start: v('ps1'), block: +v('pb'), brk: +v('pk'), dayOffset: +v('pd') });
         preview = { type: 'plan', items: items };
         $('#prev-plan').innerHTML = '<h3 style="margin-top:1rem">Draft plan</h3><ul class="list">' + items.map(function (i) { return '<li><div class="t"><b>' + hm(i.start) + ' to ' + hm(i.end) + '</b><br><small>' + esc(i.title) + '</small></div></li>'; }).join('') + '</ul><button class="btn" data-act="saveplan">Save plan</button>';
         return;
@@ -143,6 +192,11 @@
       if (k === 'note') { await DB.notes.add({ title: v('nt'), body: v('nb') }); toast('Note saved'); }
       if (k === 'goal') { await DB.goals.add({ title: v('gt'), target_date: v('gd'), progress: 0 }); toast('Goal added'); }
       if (k === 'profile') { await DB.profile.set({ display_name: v('pn'), timezone: v('pz'), day_start: v('ps') || '08:00' }); toast('Settings saved'); }
+      if (k === 'chat') { await sendChat(v('ci')); return; }
+      if (k === 'edit') {
+        await DB.tasks.update($('#ei').value, { title: v('et'), priority: v('ep'), due_at: iso(v('ed')) });
+        $('#edit').close(); toast('Task updated');
+      }
       if (k === 'quick') {
         var ty = v('qk'), ti = v('qt'), wh = iso(v('qw'));
         if (ty === 'task') await DB.tasks.add({ title: ti, priority: 'medium', status: 'open', due_at: wh });
@@ -159,6 +213,20 @@
     try {
       if (a === 'retry') return render();
       if (a === 'quick') return $('#quick').showModal();
+      if (a === 'edit') {
+        var tk = (await DB.tasks.list()).filter(function (x) { return x.id === id; })[0]; if (!tk) return;
+        $('#ei').value = tk.id; $('#et').value = tk.title; $('#ep').value = tk.priority || 'medium'; $('#ed').value = localDT(tk.due_at);
+        return $('#edit').showModal();
+      }
+      if (a === 'starter') { $('#ci').value = b.dataset.text; return sendChat(b.dataset.text); }
+      if (a === 'chatcopy') { await navigator.clipboard.writeText(b.dataset.text); return toast('Copied'); }
+      if (a === 'chatnote') { await DB.notes.add({ title: 'Assistant: ' + b.dataset.text.slice(0, 50).replace(/\n/g, ' '), body: b.dataset.text }); return toast('Saved to Notes'); }
+      if (a === 'chatclear') { if (!confirm('Delete this whole conversation?')) return; var ms = await DB.messages.list(); for (var mi = 0; mi < ms.length; mi++) await DB.messages.remove(ms[mi].id); return render(); }
+      if (a === 'clearplan') {
+        var planned = (await DB.tasks.list()).filter(function (x) { return x.scheduled_start; });
+        for (var ci = 0; ci < planned.length; ci++) await DB.tasks.update(planned[ci].id, { scheduled_start: null, scheduled_end: null });
+        toast('Plan cleared'); return render();
+      }
       if (a === 'del') { if (!confirm('Delete this item? This cannot be undone.')) return; await DB[b.dataset.t].remove(id); return render(); }
       if (a === 'rq') { $('#rqw').value = whenFor(b.dataset.k); return $('#rqt').focus(); }
       if (a === 'saveplan') {
@@ -180,7 +248,7 @@
       if (a === 'addsug') { await DB.tasks.add({ title: b.dataset.text, priority: 'medium', status: 'open', due_at: null }); b.closest('li').remove(); return toast('Task added'); }
       if (a === 'notif') { await Notification.requestPermission(); return render(); }
       if (a === 'export') { var blob = new Blob([JSON.stringify(await DB.exportAll(), null, 2)], { type: 'application/json' }), l = document.createElement('a'); l.href = URL.createObjectURL(blob); l.download = 'daily-life-assistant-export.json'; l.click(); return; }
-      if (a === 'wipe') { if (confirm('Delete all tasks, notes, reminders, goals and chats from this browser?')) { await DB.wipe(); toast('All data deleted'); render(); } }
+      if (a === 'wipe') { if (confirm('Delete all tasks, notes, reminders, goals from your account?')) { await DB.wipe(); toast('All data deleted'); render(); } }
     } catch (err) { console.error(err); toast('That did not work. Please try again.'); }
   });
   document.addEventListener('change', async function (e) {
@@ -189,6 +257,7 @@
     if (a === 'tfilter') { sessionStorage.setItem('tf', t.value); render(); }
     if (a === 'gprog') { await DB.goals.update(t.dataset.id, { progress: +t.value }); render(); }
   });
+  document.addEventListener('keydown', function (e) { if (e.target.id === 'ci' && e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); sendChat(e.target.value.trim()); } });
   var tmr; document.addEventListener('input', function (e) { if (e.target.dataset && e.target.dataset.act === 'tsearch') { var v = e.target.value; clearTimeout(tmr); tmr = setTimeout(function () { sessionStorage.setItem('tq', v); render().then(function () { var i = $('#tqs'); if (i) { i.focus(); i.setSelectionRange(v.length, v.length); } }); }, 250); } });
 
   async function checkReminders() {
