@@ -6,7 +6,7 @@
 <link rel="stylesheet" href="css/styles.css"></head>
 <body><div class="shell">
 <nav class="side" aria-label="Main"><div class="brand">Daily Life Assistant</div>
-<a class="nav" href="#today">Today</a><a class="nav" href="#planner">Planner</a><a class="nav" href="#reports">Overview</a><a class="nav" href="#tasks">Tasks</a><a class="nav" href="#reminders">Reminders</a><a class="nav" href="#notes">Notes</a><a class="nav" href="#goals">Goals</a><a class="nav" href="#settings">Settings</a>
+<a class="nav" href="#today">Today</a><a class="nav" href="#assistant">Assistant</a><a class="nav" href="#planner">Planner</a><a class="nav" href="#reports">Overview</a><a class="nav" href="#tasks">Tasks</a><a class="nav" href="#reminders">Reminders</a><a class="nav" href="#notes">Notes</a><a class="nav" href="#goals">Goals</a><a class="nav" href="#settings">Settings</a>
 <button class="btn" data-act="quick">Quick add</button></nav>
 <main id="view" tabindex="-1"></main></div>
 <button class="btn fab" data-act="quick">+ Add</button>
@@ -15,6 +15,11 @@
 <label for="qt">Title</label><input id="qt" required maxlength="200" style="width:100%">
 <label for="qw">Date and time (required for reminders)</label><input id="qw" type="datetime-local">
 <p></p><div class="row"><button class="btn">Save</button><button type="button" class="btn ghost" onclick="document.getElementById('quick').close()">Cancel</button></div></form></dialog>
+<dialog id="edit"><form data-form="edit"><h2>Edit task</h2><input type="hidden" id="ei">
+<label for="et">Title</label><input id="et" required maxlength="200" style="width:100%">
+<label for="ep">Priority</label><select id="ep"><option>high</option><option>medium</option><option>low</option></select>
+<label for="ed">Due</label><input id="ed" type="datetime-local">
+<p></p><div class="row"><button class="btn">Save</button><button type="button" class="btn ghost" onclick="document.getElementById('edit').close()">Cancel</button></div></form></dialog>
 <div id="live" aria-live="polite"></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="js/config.js"></script><script src="js/store.js"></script><script src="js/auth.js"></script>
