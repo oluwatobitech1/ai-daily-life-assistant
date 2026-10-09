@@ -50,3 +50,6 @@ label{display:block;font-size:.9rem;margin:.6rem 0 .2rem;color:var(--muted)}
 .bar{height:10px;border-radius:99px;background:var(--line);overflow:hidden}.bar i{display:block;height:100%;background:var(--accent)}
 .barrow{display:grid;grid-template-columns:90px 1fr 36px;gap:.6rem;align-items:center;margin:.4rem 0}
 .chk{display:flex;gap:.5rem;align-items:center;color:var(--ink);margin:.2rem 0}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.msg.md{white-space:normal}.msg.md p{margin:0 0 .5rem}.msg.md ul{margin:.2rem 0 .6rem;padding-left:1.2rem}.msg.md code{background:var(--bg);padding:0 .3rem;border-radius:4px}
+.chat{max-height:55vh;overflow-y:auto}
